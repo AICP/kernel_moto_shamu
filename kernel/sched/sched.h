@@ -146,7 +146,7 @@ struct task_group {
 	unsigned long shares;
 
 	atomic_t load_weight;
-	atomic64_t load_avg;
+	atomic_long_t load_avg;
 	atomic_t runnable_avg;
 #endif
 
@@ -285,7 +285,7 @@ struct cfs_rq {
 /* These always depend on CONFIG_FAIR_GROUP_SCHED */
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	u32 tg_runnable_contrib;
-	u64 tg_load_contrib;
+	unsigned long tg_load_contrib;
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
 	/*
