@@ -930,6 +930,14 @@ static void probe_work(struct work_struct *work)
 	/* Read calibration results */
 	drv260x_read_reg_val(reinit_sequence, sizeof(reinit_sequence));
 
+	if (drv260x->use_default_calibration) {
+		reinit_sequence[3] = drv260x->default_calibration[0];
+		reinit_sequence[5] = drv260x->default_calibration[1];
+		reinit_sequence[7] = drv260x->default_calibration[2];
+		reinit_sequence[9] = drv260x->default_calibration[3];
+		reinit_sequence[11] = drv260x->default_calibration[4];
+	}
+
 	/* Read device ID */
 	device_id = (status & DEV_ID_MASK);
 	switch (device_id) {
