@@ -1125,20 +1125,14 @@ int f2fs_trim_fs(struct f2fs_sb_info *sbi, struct fstrim_range *range)
 	end_segno = (end >= MAX_BLKADDR(sbi)) ? MAIN_SEGS(sbi) - 1 :
 						GET_SEGNO(sbi, end);
 	cpc.reason = CP_DISCARD;
+	cpc.trim_start = start_segno;
+	cpc.trim_end = end_segno;
 	cpc.trim_minlen = range->minlen >> sbi->log_blocksize;
 
 	/* do checkpoint to issue discard commands safely */
-	for (; start_segno <= end_segno;
-				start_segno += BATCHED_TRIM_SEGMENTS(sbi)) {
-		cpc.trim_start = start_segno;
-		cpc.trim_end = min_t(unsigned int,
-				start_segno + BATCHED_TRIM_SEGMENTS (sbi) - 1,
-				end_segno);
-
-		mutex_lock(&sbi->gc_mutex);
-		write_checkpoint(sbi, &cpc);
-		mutex_unlock(&sbi->gc_mutex);
-	}
+	mutex_lock(&sbi->gc_mutex);
+	write_checkpoint(sbi, &cpc);
+	mutex_unlock(&sbi->gc_mutex);
 out:
 	range->len = cpc.trimmed << sbi->log_blocksize;
 	return 0;
@@ -1466,7 +1460,7 @@ static int read_normal_summaries(struct f2fs_sb_info *sbi, int type)
 		segno = le32_to_cpu(ckpt->cur_data_segno[type]);
 		blk_off = le16_to_cpu(ckpt->cur_data_blkoff[type -
 							CURSEG_HOT_DATA]);
-		if (__exist_node_summaries(sbi))
+		if (is_set_ckpt_flags(ckpt, CP_UMOUNT_FLAG))
 			blk_addr = sum_blk_addr(sbi, NR_CURSEG_TYPE, type);
 		else
 			blk_addr = sum_blk_addr(sbi, NR_CURSEG_DATA_TYPE, type);
@@ -1475,7 +1469,7 @@ static int read_normal_summaries(struct f2fs_sb_info *sbi, int type)
 							CURSEG_HOT_NODE]);
 		blk_off = le16_to_cpu(ckpt->cur_node_blkoff[type -
 							CURSEG_HOT_NODE]);
-		if (__exist_node_summaries(sbi))
+		if (is_set_ckpt_flags(ckpt, CP_UMOUNT_FLAG))
 			blk_addr = sum_blk_addr(sbi, NR_CURSEG_NODE_TYPE,
 							type - CURSEG_HOT_NODE);
 		else
@@ -1486,7 +1480,7 @@ static int read_normal_summaries(struct f2fs_sb_info *sbi, int type)
 	sum = (struct f2fs_summary_block *)page_address(new);
 
 	if (IS_NODESEG(type)) {
-		if (__exist_node_summaries(sbi)) {
+		if (is_set_ckpt_flags(ckpt, CP_UMOUNT_FLAG)) {
 			struct f2fs_summary *ns = &sum->entries[0];
 			int i;
 			for (i = 0; i < sbi->blocks_per_seg; i++, ns++) {
@@ -1535,7 +1529,7 @@ static int restore_curseg_summaries(struct f2fs_sb_info *sbi)
 		type = CURSEG_HOT_NODE;
 	}
 
-	if (__exist_node_summaries(sbi))
+	if (is_set_ckpt_flags(F2FS_CKPT(sbi), CP_UMOUNT_FLAG))
 		ra_meta_pages(sbi, sum_blk_addr(sbi, NR_CURSEG_TYPE, type),
 					NR_CURSEG_TYPE - type, META_CP);
 
@@ -1632,7 +1626,8 @@ void write_data_summaries(struct f2fs_sb_info *sbi, block_t start_blk)
 
 void write_node_summaries(struct f2fs_sb_info *sbi, block_t start_blk)
 {
-	write_normal_summaries(sbi, start_blk, CURSEG_HOT_NODE);
+	if (is_set_ckpt_flags(F2FS_CKPT(sbi), CP_UMOUNT_FLAG))
+		write_normal_summaries(sbi, start_blk, CURSEG_HOT_NODE);
 }
 
 int lookup_journal_in_cursum(struct f2fs_summary_block *sum, int type,
@@ -2191,8 +2186,6 @@ int build_segment_manager(struct f2fs_sb_info *sbi)
 	INIT_LIST_HEAD(&sm_info->discard_list);
 	sm_info->nr_discards = 0;
 	sm_info->max_discards = 0;
-
-	sm_info->trim_sections = DEF_BATCHED_TRIM_SECTIONS;
 
 	INIT_LIST_HEAD(&sm_info->sit_entry_set);
 
