@@ -909,10 +909,10 @@ static void max17042_set_temp_threshold(struct max17042_chip *chip,
 #define HYSTERISIS_DEGC 2
 static int max17042_check_temp(struct max17042_chip *chip)
 {
-	int batt_temp = 0;
+	int batt_temp;
 	int hotspot;
-	int max_t = 0;
-	int min_t = 0;
+	int max_t;
+	int min_t;
 	struct max17042_platform_data *pdata;
 	int temp_state = POWER_SUPPLY_HEALTH_GOOD;
 	union power_supply_propval ps = {0, };

@@ -984,7 +984,7 @@ err:
 static int wcd9xxx_enable_static_supplies(struct wcd9xxx *wcd9xxx,
 					  struct wcd9xxx_pdata *pdata)
 {
-	int i = 0;
+	int i;
 	int ret = 0;
 
 	for (i = 0; i < wcd9xxx->num_of_supplies; i++) {
@@ -1001,7 +1001,7 @@ static int wcd9xxx_enable_static_supplies(struct wcd9xxx *wcd9xxx,
 		}
 	}
 
-	while (ret && --i && i >= 0)
+	while (ret && --i)
 		if (!pdata->regulator[i].ondemand)
 			regulator_disable(wcd9xxx->supplies[i].consumer);
 
