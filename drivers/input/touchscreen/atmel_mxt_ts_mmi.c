@@ -1503,7 +1503,7 @@ static void mxt_proc_t93_messages(struct mxt_data *data, u8 *msg)
 		struct input_dev *input_dev = data->input_dev;
 
 #ifdef CONFIG_WAKE_GESTURES
-		set_vibrate(vib_strength);
+		if (dt2w_switch) set_vibrate(vib_strength);
 #endif
 		input_report_key(input_dev, KEY_POWER, 1);
 		input_report_key(input_dev, KEY_POWER, 0);
@@ -4980,7 +4980,7 @@ static int mxt_suspend(struct device *dev)
 		dev_dbg(&data->client->dev, "critical section LOCK\n");
 
 #ifdef CONFIG_WAKE_GESTURES
-		if (s2w_switch)
+		if (s2w_switch && !disable_s2w)
 			mxt_set_sensor_state(data, STATE_WG);
 		else
 #endif
