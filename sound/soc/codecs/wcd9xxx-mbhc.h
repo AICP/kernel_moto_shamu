@@ -13,6 +13,7 @@
 #define __WCD9XXX_MBHC_H__
 
 #include "wcd9xxx-resmgr.h"
+#include "wcdcal-hwdep.h"
 
 #define WCD9XXX_CFILT_FAST_MODE 0x00
 #define WCD9XXX_CFILT_SLOW_MODE 0x40
@@ -139,8 +140,8 @@ enum wcd9xxx_mbhc_clk_freq {
 enum wcd9xxx_mbhc_event_state {
 	MBHC_EVENT_PA_HPHL,
 	MBHC_EVENT_PA_HPHR,
-	MBHC_EVENT_PRE_TX_3_ON,
-	MBHC_EVENT_POST_TX_3_OFF,
+	MBHC_EVENT_PRE_TX_1_3_ON,
+	MBHC_EVENT_POST_TX_1_3_OFF,
 };
 
 struct wcd9xxx_mbhc_general_cfg {
@@ -294,6 +295,8 @@ struct wcd9xxx_mbhc_cb {
 	bool (*insert_rem_status) (struct snd_soc_codec *);
 	void (*micbias_pulldown_ctrl) (struct wcd9xxx_mbhc *, bool);
 	int (*codec_rco_ctrl) (struct snd_soc_codec *, bool);
+	struct firmware_cal * (*get_hwdep_fw_cal) (struct snd_soc_codec *,
+				enum wcd_cal_type);
 };
 
 struct wcd9xxx_mbhc {
@@ -319,6 +322,7 @@ struct wcd9xxx_mbhc {
 	/* Work to perform MBHC Firmware Read */
 	struct delayed_work mbhc_firmware_dwork;
 	const struct firmware *mbhc_fw;
+	struct firmware_cal *mbhc_cal;
 
 	struct delayed_work mbhc_insert_dwork;
 

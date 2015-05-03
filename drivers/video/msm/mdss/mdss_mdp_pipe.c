@@ -891,6 +891,7 @@ int mdss_mdp_pipe_fetch_halt(struct mdss_mdp_pipe *pipe)
 			mdata->vbif_base + MMSS_VBIF_XIN_HALT_CTRL0);
 
 		if (sw_reset_avail) {
+			reg_val = readl_relaxed(mdata->mdp_base + sw_reset_off);
 			writel_relaxed(reg_val & ~BIT(pipe->sw_reset.bit_off),
 				mdata->mdp_base + sw_reset_off);
 			wmb();
@@ -1324,7 +1325,7 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 		 (pipe->mixer_left->type == MDSS_MDP_MIXER_TYPE_WRITEBACK) &&
 		 (ctl->mdata->mixer_switched)) || ctl->roi_changed;
 	if ((!(pipe->flags & MDP_VPU_PIPE) &&
-			(src_data == NULL || !pipe->has_buf)) ||
+			(src_data == NULL)) ||
 			(pipe->flags & MDP_SOLID_FILL)) {
 		pipe->params_changed = 0;
 		mdss_mdp_pipe_solidfill_setup(pipe);
@@ -1358,9 +1359,9 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 			opmode);
 	}
 
-	if (src_data == NULL || !pipe->has_buf) {
-		pr_debug("src_data=%p has_buf=%d pipe num=%dx",
-				src_data, pipe->has_buf, pipe->num);
+	if (src_data == NULL) {
+		pr_debug("src_data=%p pipe num=%dx\n",
+				src_data, pipe->num);
 		goto update_nobuf;
 	}
 

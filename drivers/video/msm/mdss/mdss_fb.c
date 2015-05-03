@@ -1072,6 +1072,22 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		return -EPERM;
 
 	cur_power_state = mfd->panel_power_state;
+
+	/*
+	 * If doze mode is requested for video mode panels, treat
+	 * the request as full unblank as there are no low power mode
+	 * settings for video mode panels.
+	 */
+	if ((FB_BLANK_VSYNC_SUSPEND == blank_mode) &&
+		(mfd->panel_info->type != MIPI_CMD_PANEL)) {
+		pr_debug("Doze mode only valid for cmd mode panels\n");
+
+		if (mdss_panel_is_power_on(cur_power_state))
+			return 0;
+		else
+			blank_mode = FB_BLANK_UNBLANK;
+	}
+
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
@@ -2550,11 +2566,12 @@ int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state)
 		if ((mfd->dcm_state == DCM_EXIT ||
 			mfd->dcm_state == DCM_UNBLANK) &&
 			mdss_fb_is_power_on(mfd) && mfd->mdp.off_fnc) {
+			mfd->panel_power_state = MDSS_PANEL_POWER_OFF;
 			ret = mfd->mdp.off_fnc(mfd);
-			if (ret == 0) {
-				mfd->panel_power_state = MDSS_PANEL_POWER_OFF;
+			if (ret == 0)
 				mfd->dcm_state = DCM_UNINIT;
-			}
+			else
+				pr_err("DCM_BLANK failed\n");
 		}
 		break;
 	case DTM_ENTER:
