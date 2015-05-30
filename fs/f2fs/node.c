@@ -1071,7 +1071,6 @@ repeat:
 		f2fs_put_page(page, 1);
 		goto repeat;
 	}
-	mark_page_accessed(page);
 	return page;
 }
 
@@ -1126,7 +1125,6 @@ page_hit:
 		f2fs_put_page(page, 1);
 		return ERR_PTR(-EIO);
 	}
-	mark_page_accessed(page);
 	return page;
 }
 
