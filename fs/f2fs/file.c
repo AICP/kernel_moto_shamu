@@ -1060,7 +1060,7 @@ static int f2fs_insert_range(struct inode *inode, loff_t offset, loff_t len)
 	if (ret)
 		return ret;
 
-	truncate_pagecache(inode, offset);
+	truncate_pagecache(inode, 0, offset);
 
 	pg_start = offset >> PAGE_CACHE_SHIFT;
 	pg_end = (offset + len) >> PAGE_CACHE_SHIFT;
@@ -1185,6 +1185,7 @@ noalloc:
 
 #define FALLOC_FL_COLLAPSE_RANGE	0X08
 #define FALLOC_FL_ZERO_RANGE		0X10
+#define FALLOC_FL_INSERT_RANGE		0x20
 
 static long f2fs_fallocate(struct file *file, int mode,
 				loff_t offset, loff_t len)
