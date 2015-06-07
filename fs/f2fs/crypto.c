@@ -84,13 +84,7 @@ void f2fs_release_crypto_ctx(struct f2fs_crypto_ctx *ctx)
 	unsigned long flags;
 
 	if (ctx->flags & F2FS_WRITE_PATH_FL && ctx->w.bounce_page) {
-		if (ctx->flags & F2FS_BOUNCE_PAGE_POOL_FREE_ENCRYPT_FL)
-			mempool_free(ctx->w.bounce_page, f2fs_bounce_page_pool);
-		else if (ctx->flags & F2FS_EMERGENT_PAGE_POOL_FREE_ENCRYPT_FL)
-			mempool_free(ctx->w.bounce_page,
-					f2fs_emergent_page_pool);
-		else
-			__free_page(ctx->w.bounce_page);
+		mempool_free(ctx->w.bounce_page, f2fs_bounce_page_pool);
 		ctx->w.bounce_page = NULL;
 	}
 	ctx->w.control_page = NULL;
@@ -420,41 +414,28 @@ struct page *f2fs_encrypt(struct inode *inode,
 		return (struct page *)ctx;
 
 	/* The encryption operation will require a bounce page. */
-	ctx->flags &= ~F2FS_MASK_PAGE_POOL_FREE_ENCRYPT_FL;
-
-	ciphertext_page = mempool_alloc(f2fs_bounce_page_pool, GFP_NOFS);
-	if (ciphertext_page) {
-		ctx->flags |= F2FS_BOUNCE_PAGE_POOL_FREE_ENCRYPT_FL;
-		goto got_it;
-	}
-
-	ciphertext_page = alloc_page(GFP_NOFS);
+	ciphertext_page = mempool_alloc(f2fs_bounce_page_pool, GFP_NOWAIT);
 	if (!ciphertext_page) {
-		/*
-		 * This is a potential bottleneck, but at least we'll have
-		 * forward progress.
-		 */
-		ciphertext_page = mempool_alloc(f2fs_emergent_page_pool,
-								GFP_NOFS);
-		if (WARN_ON_ONCE(!ciphertext_page))
-			ciphertext_page = mempool_alloc(f2fs_emergent_page_pool,
-						GFP_NOFS | __GFP_NOFAIL);
-		ctx->flags |= F2FS_EMERGENT_PAGE_POOL_FREE_ENCRYPT_FL;
+		err = -ENOMEM;
+		goto err_out;
 	}
-got_it:
+
 	ctx->flags |= F2FS_WRITE_PATH_FL;
 	ctx->w.bounce_page = ciphertext_page;
 	ctx->w.control_page = plaintext_page;
 	err = f2fs_page_crypto(ctx, inode, F2FS_ENCRYPT, plaintext_page->index,
 					plaintext_page, ciphertext_page);
-	if (err) {
-		f2fs_release_crypto_ctx(ctx);
-		return ERR_PTR(err);
-	}
+	if (err)
+		goto err_out;
+
 	SetPagePrivate(ciphertext_page);
 	set_page_private(ciphertext_page, (unsigned long)ctx);
 	lock_page(ciphertext_page);
 	return ciphertext_page;
+
+err_out:
+	f2fs_release_crypto_ctx(ctx);
+	return ERR_PTR(err);
 }
 
 /**
