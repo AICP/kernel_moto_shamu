@@ -61,8 +61,7 @@ unsigned long f2fs_shrink_count(struct shrinker *shrink,
 	return count;
 }
 
-unsigned long f2fs_shrink_scan(struct shrinker *shrink,
-				struct shrink_control *sc)
+int f2fs_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 {
 	unsigned long nr = sc->nr_to_scan;
 	struct f2fs_sb_info *sbi;
