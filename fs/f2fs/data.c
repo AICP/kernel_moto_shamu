@@ -1509,7 +1509,7 @@ static int f2fs_write_end(struct file *file,
 		update_inode_page(inode);
 	}
 
-	f2fs_put_page(page, 1);<<
+	f2fs_put_page(page, 1);
 	return copied;
 }
 
