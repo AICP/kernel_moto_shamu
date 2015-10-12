@@ -233,6 +233,7 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(max_victim_search),
 	ATTR_LIST(dir_level),
 	ATTR_LIST(ram_thresh),
+	ATTR_LIST(ra_nid_pages),
 	ATTR_LIST(cp_interval),
 	NULL,
 };
