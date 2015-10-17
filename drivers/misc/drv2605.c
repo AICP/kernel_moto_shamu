@@ -163,6 +163,9 @@
 #define I2C_RETRY_DELAY		20 /* ms */
 #define I2C_RETRIES		5
 
+static struct kobject *vibe_kobj;
+static int vibe_strength;
+
 static struct drv260x {
 	struct class *class;
 	struct device *device;
@@ -587,7 +590,7 @@ static void vibrator_enable(struct timed_output_dev *dev, int value)
 		if (mode != MODE_REAL_TIME_PLAYBACK) {
 			if (audio_haptics_enabled && mode == MODE_AUDIOHAPTIC)
 				setAudioHapticsEnabled(NO);
-			drv260x_set_rtp_val(REAL_TIME_PLAYBACK_STRENGTH);
+			drv260x_set_rtp_val(vibe_strength);
 			drv260x_change_mode(MODE_REAL_TIME_PLAYBACK);
 			vibrator_is_playing = YES;
 		}
@@ -686,6 +689,12 @@ static struct timed_output_dev to_dev = {
 	.get_time = vibrator_get_time,
 	.enable = vibrator_enable,
 };
+
+void set_vibrate(int value)
+{
+	vibrator_enable(&to_dev, value);
+}
+
 static void drv260x_update_init_sequence(unsigned char *seq, int size,
 					unsigned char reg, unsigned char data)
 {
@@ -930,6 +939,14 @@ static void probe_work(struct work_struct *work)
 	/* Read calibration results */
 	drv260x_read_reg_val(reinit_sequence, sizeof(reinit_sequence));
 
+	if (drv260x->use_default_calibration) {
+		reinit_sequence[3] = drv260x->default_calibration[0];
+		reinit_sequence[5] = drv260x->default_calibration[1];
+		reinit_sequence[7] = drv260x->default_calibration[2];
+		reinit_sequence[9] = drv260x->default_calibration[3];
+		reinit_sequence[11] = drv260x->default_calibration[4];
+	}
+
 	/* Read device ID */
 	device_id = (status & DEV_ID_MASK);
 	switch (device_id) {
@@ -1145,10 +1162,31 @@ static struct file_operations fops = {
 	.write = drv260x_write
 };
 
+static ssize_t pwmvalue_show(struct device *dev,
+                struct device_attribute *attr, char *buf)
+{
+        size_t count = 0;
+        count += sprintf(buf, "%d\n", vibe_strength);
+        return count;
+}
+
+static ssize_t pwmvalue_store(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t count)
+{
+	int vs = 0;
+        sscanf(buf, "%d ",&vs);
+        if (vs < 0 || vs > 127) vs = 100;
+	vibe_strength = vs;
+        return count;
+}
+
+static DEVICE_ATTR(pwmvalue, (S_IWUSR|S_IRUGO), pwmvalue_show, pwmvalue_store);
+
 static int drv260x_init(void)
 {
 	int reval = -ENOMEM;
 
+	vibe_strength = REAL_TIME_PLAYBACK_STRENGTH;
 	drv260x = kmalloc(sizeof *drv260x, GFP_KERNEL);
 	if (!drv260x) {
 		printk(KERN_ALERT
@@ -1203,6 +1241,10 @@ static int drv260x_init(void)
 	mutex_init(&vibdata.lock);
 
 	printk(KERN_ALERT "drv260x: initialized\n");
+
+	vibe_kobj = kobject_create_and_add("vibrator", NULL);
+	if (!vibe_kobj) return 0;
+	reval = sysfs_create_file(vibe_kobj, &dev_attr_pwmvalue.attr);
 	return 0;
 
  fail6:
@@ -1220,6 +1262,7 @@ static int drv260x_init(void)
 
 static void drv260x_exit(void)
 {
+	kobject_del(vibe_kobj);
 	gpio_direction_output(drv260x->en_gpio, GPIO_LEVEL_LOW);
 	gpio_free(drv260x->en_gpio);
 	if (!IS_ERR(drv260x->vibrator_vdd))
