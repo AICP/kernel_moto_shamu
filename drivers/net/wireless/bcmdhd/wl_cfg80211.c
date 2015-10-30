@@ -10085,6 +10085,7 @@ static s32 wl_notify_escan_complete(struct bcm_cfg80211 *cfg,
 	s32 err = BCME_OK;
 	unsigned long flags;
 	struct net_device *dev;
+	int count;
 
 	WL_DBG(("Enter \n"));
 	if (!ndev) {
@@ -10125,9 +10126,7 @@ static s32 wl_notify_escan_complete(struct bcm_cfg80211 *cfg,
 	spin_lock_irqsave(&cfg->cfgdrv_lock, flags);
 #ifdef WL_SCHED_SCAN
 	if (cfg->sched_scan_req && !cfg->scan_request) {
-		int count;
-
-		count = cfg->bss_list ? cfg->bss_list->count : 0;
+		count = cfg->bss_list ? cfg->bss_list->count: 0;
 		if (!aborted) {
 			cfg80211_sched_scan_results(cfg->sched_scan_req->wiphy);
 			printk(">> SCHED SCAN RESULT %d\n", count);
