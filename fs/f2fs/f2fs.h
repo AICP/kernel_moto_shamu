@@ -1234,14 +1234,6 @@ static inline unsigned int valid_inode_count(struct f2fs_sb_info *sbi)
 	return sbi->total_valid_inode_count;
 }
 
-static inline struct page *f2fs_grab_cache_page(struct address_space *mapping,
-						pgoff_t index, bool for_write)
-{
-	if (!for_write)
-		return grab_cache_page(mapping, index);
-	return grab_cache_page_write_begin(mapping, index, AOP_FLAG_NOFS);
-}
-
 static inline void f2fs_copy_page(struct page *src, struct page *dst)
 {
 	char *src_kaddr = kmap(src);

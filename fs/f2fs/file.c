@@ -884,7 +884,7 @@ static int __exchange_data_block(struct inode *inode, pgoff_t src,
 	} else {
 		struct page *psrc, *pdst;
 
-		psrc = get_lock_data_page(inode, src, true);
+		psrc = get_lock_data_page(inode, src);
 		if (IS_ERR(psrc))
 			return PTR_ERR(psrc);
 		pdst = get_new_data_page(inode, NULL, dst, false);
