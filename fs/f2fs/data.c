@@ -772,10 +772,9 @@ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 	if (ret)
 		return ret;
 
-	/* we don't need to use inline_data strictly */
 	if (f2fs_has_inline_data(inode)) {
-		ret = f2fs_convert_inline_inode(inode);
-		if (ret)
+		ret = f2fs_inline_data_fiemap(inode, fieinfo, start, len);
+		if (ret != -EAGAIN)
 			return ret;
 	}
 
