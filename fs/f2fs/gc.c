@@ -643,8 +643,8 @@ static void move_data_page(struct inode *inode, block_t bidx, int gc_type)
 			.page = page,
 			.encrypted_page = NULL,
 		};
+		set_page_dirty(page);
 		f2fs_wait_on_page_writeback(page, DATA);
-
 		if (clear_page_dirty_for_io(page))
 			inode_dec_dirty_pages(inode);
 		set_cold_data(page);

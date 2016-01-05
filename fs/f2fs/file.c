@@ -1412,7 +1412,6 @@ static int f2fs_ioc_commit_atomic_write(struct file *filp)
 	ret = f2fs_sync_file(filp, 0, LLONG_MAX, 0);
 err_out:
 	mnt_drop_write_file(filp);
-	clear_inode_flag(F2FS_I(inode), FI_ATOMIC_FILE);
 	return ret;
 }
 
