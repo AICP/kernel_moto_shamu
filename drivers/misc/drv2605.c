@@ -153,6 +153,10 @@
 #define REAL_TIME_PLAYBACK_STRENGTH 0x7F
 #endif
 
+#define MAX_VIBE_STRENGTH   REAL_TIME_PLAYBACK_STRENGTH
+#define MIN_VIBE_STRENGTH   0x20
+#define DEF_VIBE_STRENGTH   MAX_VIBE_STRENGTH
+
 #define MAX_TIMEOUT 15000	/* 15s */
 
 #define DEFAULT_EFFECT 14	/* Strong buzz 100% */
@@ -162,9 +166,6 @@
 
 #define I2C_RETRY_DELAY		20 /* ms */
 #define I2C_RETRIES		5
-
-static struct kobject *vibe_kobj;
-static int vibe_strength;
 
 static struct drv260x {
 	struct class *class;
@@ -199,6 +200,7 @@ static struct vibrator {
 
 static char g_effect_bank = EFFECT_LIBRARY;
 static int device_id = -1;
+static int vibe_strength = DEF_VIBE_STRENGTH;
 
 static unsigned char ERM_autocal_sequence[] = {
 	MODE_REG, AUTO_CALIBRATION,
@@ -298,6 +300,80 @@ static unsigned char LRA_init_sequence[] = {
 	AUTOCAL_MEM_INTERFACE_REG, AUTOCAL_TIME_500MS,
 };
 #endif
+
+static ssize_t drv260x_vib_min_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", MIN_VIBE_STRENGTH);
+}
+
+static ssize_t drv260x_vib_max_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", MAX_VIBE_STRENGTH);
+}
+
+static ssize_t drv260x_vib_default_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", DEF_VIBE_STRENGTH);
+}
+
+static ssize_t drv260x_vib_level_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", vibe_strength);
+}
+
+
+static ssize_t drv260x_vib_level_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	int rc;
+	int val;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc) {
+		pr_err("%s: error getting level\n", __func__);
+		return -EINVAL;
+	}
+
+	if (val < MIN_VIBE_STRENGTH) {
+		pr_err("%s: level %d not in range (%d - %d), using min.\n",
+				__func__, val, MIN_VIBE_STRENGTH, MAX_VIBE_STRENGTH);
+		val = MIN_VIBE_STRENGTH;
+	} else if (val > MAX_VIBE_STRENGTH) {
+		pr_err("%s: level %d not in range (%d - %d), using max.\n",
+				__func__, val, MIN_VIBE_STRENGTH, MAX_VIBE_STRENGTH);
+		val = MAX_VIBE_STRENGTH;
+	}
+
+	vibe_strength = val;
+
+	return strnlen(buf, count);
+}
+
+static DEVICE_ATTR(vtg_min, S_IRUGO, drv260x_vib_min_show, NULL);
+static DEVICE_ATTR(vtg_max, S_IRUGO, drv260x_vib_max_show, NULL);
+static DEVICE_ATTR(vtg_default, S_IRUGO, drv260x_vib_default_show, NULL);
+static DEVICE_ATTR(vtg_level, S_IRUGO | S_IWUSR, drv260x_vib_level_show, drv260x_vib_level_store);
+
+static struct attribute *timed_dev_attrs[] = {
+	&dev_attr_vtg_min.attr,
+	&dev_attr_vtg_max.attr,
+	&dev_attr_vtg_default.attr,
+	&dev_attr_vtg_level.attr,
+	NULL,
+};
+
+static struct attribute_group timed_dev_attr_group = {
+	.attrs = timed_dev_attrs,
+};
 
 #ifdef CONFIG_OF
 static struct drv260x_platform_data *drv260x_of_init(struct i2c_client *client)
@@ -405,7 +481,7 @@ static void drv260x_set_go_bit(char val)
 	drv260x_write_reg_val(go, sizeof(go));
 }
 
-static unsigned char drv260x_read_reg(unsigned char reg)
+static int drv260x_read_reg(unsigned char reg)
 {
 	int tries;
 	int ret;
@@ -748,7 +824,7 @@ static int drv260x_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
 	struct drv260x_platform_data *pdata = NULL;
-	int err;
+	int err, i;
 
 	if (client->dev.of_node)
 		pdata = drv260x_of_init(client);
@@ -777,6 +853,11 @@ static int drv260x_probe(struct i2c_client *client,
 	drv260x->trigger_gpio = pdata->trigger_gpio;
 	drv260x->external_trigger = pdata->external_trigger;
 	drv260x->vibrator_vdd = pdata->vibrator_vdd;
+	if (PTR_ERR(drv260x->vibrator_vdd) == -EPROBE_DEFER) {
+		if (!IS_ERR(pdata->static_vdd))
+			regulator_disable(pdata->static_vdd);
+		return -EPROBE_DEFER;
+	}
 	if(IS_ERR(drv260x->vibrator_vdd))
 		printk(KERN_ALERT "drv260x->vibrator_vdd not initialized\n");
 
@@ -793,6 +874,24 @@ static int drv260x_probe(struct i2c_client *client,
 
 	/* Reset the chip */
 	drv260x_write_reg(MODE_REG, MODE_RESET);
+
+	udelay(850);
+	/* Read status */
+
+	for (i = 0; i < I2C_RETRIES; i++) {
+		err = drv260x_read_reg(STATUS_REG);
+		if (err < 0)
+			msleep_interruptible(100);
+		else
+			break;
+	}
+
+	if (err < 0) {
+		pr_err("drv260x: HW init failed\n");
+		device_destroy(drv260x->class, drv260x->version);
+		class_destroy(drv260x->class);
+		return -ENODEV;
+	}
 
 	if (pdata->default_effect)
 		drv260x->default_sequence[0] = pdata->default_effect;
@@ -829,7 +928,7 @@ static int drv260x_probe(struct i2c_client *client,
 
 static void probe_work(struct work_struct *work)
 {
-	char status;
+	int status;
 
 	drv260x_update_init_sequence(ERM_autocal_sequence,
 					sizeof(ERM_autocal_sequence),
@@ -957,6 +1056,10 @@ static void probe_work(struct work_struct *work)
 		return;
 	}
 
+	if (sysfs_create_group(&to_dev.dev->kobj, &timed_dev_attr_group)) {
+		printk(KERN_ALERT "drv260x: fail to create strength tunables\n");
+	}
+
 	printk(KERN_ALERT "drv260x probe work succeeded");
 	return;
 }
@@ -1073,7 +1176,7 @@ static ssize_t drv260x_write(struct file *filp, const char __user *buff, size_t 
 					    && mode == MODE_AUDIOHAPTIC)
 						setAudioHapticsEnabled(NO);
 					drv260x_set_rtp_val
-					    (REAL_TIME_PLAYBACK_STRENGTH);
+					    (vibe_strength);
 					drv260x_change_mode
 					    (MODE_REAL_TIME_PLAYBACK);
 					vibrator_is_playing = YES;
@@ -1172,32 +1275,11 @@ static struct file_operations fops = {
 	.write = drv260x_write
 };
 
-static ssize_t pwmvalue_show(struct device *dev,
-                struct device_attribute *attr, char *buf)
-{
-        size_t count = 0;
-        count += sprintf(buf, "%d\n", vibe_strength);
-        return count;
-}
-
-static ssize_t pwmvalue_store(struct device *dev,
-                struct device_attribute *attr, const char *buf, size_t count)
-{
-	int vs = 0;
-        sscanf(buf, "%d ",&vs);
-        if (vs < 0 || vs > 127) vs = 100;
-	vibe_strength = vs;
-        return count;
-}
-
-static DEVICE_ATTR(pwmvalue, (S_IWUSR|S_IRUGO), pwmvalue_show, pwmvalue_store);
-
 static int drv260x_init(void)
 {
 	int reval = -ENOMEM;
 
-	vibe_strength = REAL_TIME_PLAYBACK_STRENGTH;
-	drv260x = kmalloc(sizeof *drv260x, GFP_KERNEL);
+	drv260x = kzalloc(sizeof(struct drv260x), GFP_KERNEL);
 	if (!drv260x) {
 		printk(KERN_ALERT
 		       "drv260x: cannot allocate memory for drv260x driver\n");
@@ -1251,10 +1333,6 @@ static int drv260x_init(void)
 	mutex_init(&vibdata.lock);
 
 	printk(KERN_ALERT "drv260x: initialized\n");
-
-	vibe_kobj = kobject_create_and_add("vibrator", NULL);
-	if (!vibe_kobj) return 0;
-	reval = sysfs_create_file(vibe_kobj, &dev_attr_pwmvalue.attr);
 	return 0;
 
  fail6:
@@ -1272,7 +1350,6 @@ static int drv260x_init(void)
 
 static void drv260x_exit(void)
 {
-	kobject_del(vibe_kobj);
 	gpio_direction_output(drv260x->en_gpio, GPIO_LEVEL_LOW);
 	gpio_free(drv260x->en_gpio);
 	if (!IS_ERR(drv260x->vibrator_vdd))
@@ -1287,7 +1364,7 @@ static void drv260x_exit(void)
 	printk(KERN_ALERT "drv260x: exit\n");
 }
 
-module_init(drv260x_init);
+late_initcall(drv260x_init);
 module_exit(drv260x_exit);
 
 /*  Current code version: 182 */
